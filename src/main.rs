@@ -54,8 +54,8 @@ impl App {
         let horizontal = Layout::horizontal([Fill(1); 2]);
         let [left_area, right_area] = horizontal.areas(main_area);
 
-        frame.render_widget(Block::bordered().title("Title bar"), title_area);
-        frame.render_widget(Block::bordered().title("Status bar"), status_area);
+        frame.render_widget(Block::bordered().title("Pinyin UI"), title_area);
+        frame.render_widget(Block::bordered().title("'q':Quit, 'r':Record"), status_area);
         frame.render_widget(Block::bordered().title("Left"), left_area);
         frame.render_widget(Block::bordered().title("Right"), right_area);
     }
