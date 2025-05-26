@@ -27,6 +27,42 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Stream audio from the microphone
     let mic = MicInput::default();
+    let vad_stream = mic.stream().voice_activity_stream();
+    let mut audio_chunks = vad_stream
+        .inspect(move |vad_output| {
+            let samples_count = vad_output.samples.clone().count();
+            // if samples_count > 0 {
+            //     println!("samples_count : {samples_count}");
+            // }
+        })
+        .rechunk_voice_activity()
+        .with_end_window(std::time::Duration::from_millis(400))
+        .with_end_threshold(0.25)
+        .with_time_before_speech(std::time::Duration::from_millis(200));
+
+    loop {
+        let input_audio_chunk = match tokio::time::timeout(
+            std::time::Duration::from_millis(50), // Short timeout to remain responsive to is_listening_shared
+            audio_chunks.next(),
+        )
+        .await
+        {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,  // Stream ended
+            Err(_) => continue, // Timeout, loop back to check is_listening_shared
+        };
+
+        let mut current_segment_text = String::new();
+        let mut transcribed_stream = whisper_model.transcribe(input_audio_chunk);
+
+        while let Some(transcribed) = transcribed_stream.next().await {
+            if transcribed.probability_of_no_speech() < 0.85 {
+                current_segment_text.push_str(transcribed.text());
+                println!("Transcribed: {}", current_segment_text.clone());
+            }
+        }
+    }
+
     let stream = mic.stream();
 
     // Transcribe the audio into text in chunks based on voice activity.
