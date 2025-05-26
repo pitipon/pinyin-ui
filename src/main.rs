@@ -9,8 +9,6 @@ use tokio::time::Duration;
 use tokio_stream::StreamExt;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::fs::File;
-use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 #[tokio::main]
@@ -70,10 +68,21 @@ pub async fn start_audio_stream(recording: Arc<Mutex<bool>>) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct App {
     should_quit: bool,
     actions: Actions,
+    status_message: String,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            should_quit: false,
+            actions: Actions::default(),
+            status_message: "Online".to_string(),
+        }
+    }
 }
 
 impl App {
@@ -98,13 +107,17 @@ impl App {
     fn render(&self, frame: &mut Frame) {
         use Constraint::{Fill, Length, Min};
 
-        let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
-        let [title_area, main_area, status_area] = vertical.areas(frame.area());
+        let vertical = Layout::vertical([Length(1), Min(0), Length(1), Length(1)]);
+        let [title_area, main_area, menu_area, status_area] = vertical.areas(frame.area());
         let horizontal = Layout::horizontal([Fill(1); 2]);
         let [left_area, right_area] = horizontal.areas(main_area);
 
         frame.render_widget(Block::bordered().title("Pinyin UI"), title_area);
-        frame.render_widget(Block::bordered().title("'q':Quit, 'r':Record"), status_area);
+        frame.render_widget(Block::bordered().title("'q':Quit, 'r':Record"), menu_area);
+        frame.render_widget(
+            Block::bordered().title(self.status_message.to_string()),
+            status_area,
+        );
         frame.render_widget(Block::bordered().title("Left"), left_area);
         frame.render_widget(Block::bordered().title("Right"), right_area);
     }
@@ -114,13 +127,12 @@ impl App {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
                 KeyCode::Char('r') | KeyCode::Enter => {
-                    let mut actions = self.actions.clone();
-                    actions.recording = !actions.recording; // Toggle recording state
+                    self.actions.recording = !self.actions.recording; // Toggle recording state
 
-                    if actions.recording {
-                        println!("Starting recording");
+                    if self.actions.recording {
+                        self.status_message = "Start recording".to_string();
                     } else {
-                        println!("Stopping recording");
+                        self.status_message = "Online".to_string();
                     }
                 }
                 _ => {}
