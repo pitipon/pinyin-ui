@@ -1,173 +1,19 @@
-use color_eyre::Result;
-use crossterm::event::{Event, EventStream, KeyCode};
-use ratatui::{
-    layout::{Constraint, Layout},
-    widgets::Block,
-    DefaultTerminal, Frame,
-};
-use tokio::time::Duration;
-use tokio_stream::StreamExt;
-
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::sync::{Arc, Mutex};
+use kalosm::sound::*;
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = App::default().run(terminal).await;
-    ratatui::restore();
-    app_result
-}
+async fn main() -> Result<(), anyhow::Error> {
+    // Create a new whisper model.
+    let model = Whisper::new().await?;
 
-/// Starts recording and saves to a WAV-like buffer (or stream it elsewhere)
-pub async fn start_audio_stream(recording: Arc<Mutex<bool>>) -> Result<()> {
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .expect("No input device available");
-    let config = device.default_input_config()?;
+    // Stream audio from the microphone
+    let mic = MicInput::default();
+    let stream = mic.stream();
 
-    let sample_format = config.sample_format();
-    let config = cpal::StreamConfig {
-        channels: config.channels(),
-        sample_rate: config.sample_rate(),
-        buffer_size: cpal::BufferSize::Default,
-    };
+    // Transcribe the audio into text in chunks based on voice activity.
+    let mut text_stream = stream.transcribe(model);
 
-    let err_fn = |err| eprintln!("Stream error: {}", err);
-
-    let recording_clone = recording.clone();
-    let stream = match sample_format {
-        cpal::SampleFormat::F32 => device.build_input_stream(
-            &config,
-            move |data: &[f32], _| {
-                if *recording_clone.lock().unwrap() {
-                    // Process audio samples
-                    println!("Recording {} samples", data.len());
-                    // You can collect into a buffer or stream to an AI service
-                }
-            },
-            err_fn,
-            None,
-        )?,
-        _ => unimplemented!("Unsupported format"),
-    };
-
-    stream.play()?;
-    println!("Audio stream started");
-
-    // Keep the stream alive while recording
-    tokio::spawn(async move {
-        while *recording.lock().unwrap() {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        println!("Audio stream stopped");
-    });
+    // Finally, print the text to the console
+    text_stream.to_std_out().await.unwrap();
 
     Ok(())
-}
-
-#[derive(Debug)]
-struct App {
-    should_quit: bool,
-    actions: Actions,
-    status_message: String,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            should_quit: false,
-            actions: Actions::default(),
-            status_message: "Online".to_string(),
-        }
-    }
-}
-
-impl App {
-    const FRAMES_PER_SECOND: f32 = 60.0;
-
-    pub async fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        self.actions.run();
-        let period = Duration::from_secs_f32(1.0 / Self::FRAMES_PER_SECOND);
-        let mut interval = tokio::time::interval(period);
-        let mut events = EventStream::new();
-
-        while !self.should_quit {
-            tokio::select! {
-                _ = interval.tick() => { terminal.draw(|frame| self.render(frame))?; },
-                Some(Ok(event)) = events.next() => self.handle_event(&event),
-            }
-        }
-
-        Ok(())
-    }
-
-    fn render(&self, frame: &mut Frame) {
-        use Constraint::{Fill, Length, Min};
-
-        let vertical = Layout::vertical([Length(1), Min(0), Length(1), Length(1)]);
-        let [title_area, main_area, menu_area, status_area] = vertical.areas(frame.area());
-        let horizontal = Layout::horizontal([Fill(1); 2]);
-        let [left_area, right_area] = horizontal.areas(main_area);
-
-        frame.render_widget(Block::bordered().title("Pinyin UI"), title_area);
-        frame.render_widget(Block::bordered().title("'q':Quit, 'r':Record"), menu_area);
-        frame.render_widget(
-            Block::bordered().title(self.status_message.to_string()),
-            status_area,
-        );
-        frame.render_widget(Block::bordered().title("Left"), left_area);
-        frame.render_widget(Block::bordered().title("Right"), right_area);
-    }
-
-    fn handle_event(&mut self, event: &Event) {
-        if let Some(key) = event.as_key_press_event() {
-            match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
-                KeyCode::Char('r') | KeyCode::Enter => {
-                    self.actions.recording = !self.actions.recording; // Toggle recording state
-
-                    if self.actions.recording {
-                        self.status_message = "Start recording".to_string();
-                    } else {
-                        self.status_message = "Online".to_string();
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct Actions {
-    recording: bool,
-}
-
-impl Actions {
-    fn run(&self) {
-        // clone this actions to pass to background task
-        let this = self.clone();
-    }
-
-    // Placeholder for starting recording
-    async fn start_recording(&mut self) {
-        // TODO: Integrate audio recording library here.
-        // This function should capture audio input and stream it.
-        // You might use libraries like `cpal` or `portaudio` for cross-platform audio capture.
-        // The audio data can then be processed or sent to an AI transcription service.
-        println!("Audio recording started (placeholder)");
-        // Simulate recording for a few seconds
-        // sleep(Duration::from_secs(5)).await;
-        // println!("Audio recording finished (simulated)");
-        // self.recording = false; // Auto-stop after simulation if needed
-    }
-
-    // Placeholder for stopping recording
-    async fn stop_recording(&mut self) {
-        // TODO: Stop the audio recording and finalize the stream.
-        println!("Audio recording stopped (placeholder)");
-    }
 }
