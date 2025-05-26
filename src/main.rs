@@ -115,9 +115,13 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
                 KeyCode::Char('r') | KeyCode::Enter => {
                     let mut actions = self.actions.clone();
-                    tokio::spawn(async move {
-                        actions.toggle_recording().await;
-                    });
+                    actions.recording = !actions.recording; // Toggle recording state
+
+                    if actions.recording {
+                        println!("Starting recording");
+                    } else {
+                        println!("Stopping recording");
+                    }
                 }
                 _ => {}
             }
@@ -136,19 +140,22 @@ impl Actions {
         let this = self.clone();
     }
 
-    pub async fn toggle_recording(&mut self) {
-        let shared_flag = Arc::new(Mutex::new(true));
-        if self.recording {
-            *shared_flag.lock().unwrap() = false;
-            self.recording = false;
-            println!("Recording stopped");
-        } else {
-            self.recording = true;
-            let flag_clone = Arc::clone(&shared_flag);
-            tokio::spawn(async move {
-                let _ = start_audio_stream(flag_clone).await;
-            });
-            println!("Recording started");
-        }
+    // Placeholder for starting recording
+    async fn start_recording(&mut self) {
+        // TODO: Integrate audio recording library here.
+        // This function should capture audio input and stream it.
+        // You might use libraries like `cpal` or `portaudio` for cross-platform audio capture.
+        // The audio data can then be processed or sent to an AI transcription service.
+        println!("Audio recording started (placeholder)");
+        // Simulate recording for a few seconds
+        // sleep(Duration::from_secs(5)).await;
+        // println!("Audio recording finished (simulated)");
+        // self.recording = false; // Auto-stop after simulation if needed
+    }
+
+    // Placeholder for stopping recording
+    async fn stop_recording(&mut self) {
+        // TODO: Stop the audio recording and finalize the stream.
+        println!("Audio recording stopped (placeholder)");
     }
 }
